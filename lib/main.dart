@@ -9,25 +9,37 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false, // Remove the debug banner
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
-        primaryColor: Colors.black,
+        primaryColor: Colors.indigo,
         accentColor: Colors.orange,
         fontFamily: 'Roboto',
       ),
       home: Scaffold(
         appBar: AppBar(
-          title: const Text(
+          title: Text(
             'IDEAFLOW',
             style: TextStyle(
+              color: Colors.black,
               fontSize: 24.0,
               fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
+              letterSpacing: 4.2,
             ),
           ),
           centerTitle: true,
+          backgroundColor: Colors.transparent,
+          elevation: 0,
         ),
-        body: AutocompleteWidget(),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [Colors.white, Colors.indigo.withOpacity(0.1)],
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+            ),
+          ),
+          child: AutocompleteWidget(),
+        ),
       ),
     );
   }
@@ -39,16 +51,81 @@ class AutocompleteWidget extends StatefulWidget {
 }
 
 class _AutocompleteWidgetState extends State<AutocompleteWidget> {
-  List<String> items = [];
+  List<Idea> items = [];
   TextEditingController _controller = TextEditingController();
+  bool isLinkingMode = false;
+  String selectedLinkingEntity = '';
 
-  void addItemToList(String item) {
-    if (item.isNotEmpty) {
+  void addItemToList(String title, String description) {
+    if (title.isNotEmpty) {
       setState(() {
-        items.add(item);
+        if (selectedLinkingEntity.isNotEmpty) {
+          final linkingText = _controller.text;
+          final suggestionWithBrackets = '<$selectedLinkingEntity>';
+          final updatedText = linkingText.replaceFirst(
+              RegExp('<[^>]*>'), suggestionWithBrackets);
+          _controller.text = updatedText;
+          selectedLinkingEntity = '';
+        }
+        items.insert(0, Idea(title: title, description: description));
         _controller.clear();
       });
     }
+  }
+
+  void _showSaveDialog() {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Save List'),
+          content: Text('Do you want to save the list?'),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                _saveList();
+                Navigator.pop(context);
+              },
+              child: Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _saveList() {
+    print('List items:');
+    for (Idea idea in items) {
+      print('Title: ${idea.title}, Description: ${idea.description}');
+    }
+  }
+
+  void _clearList() {
+    setState(() {
+      items.clear();
+    });
+  }
+
+  void _deleteList() {
+    setState(() {
+      items.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'List deleted!',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        duration: Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -57,65 +134,133 @@ class _AutocompleteWidgetState extends State<AutocompleteWidget> {
       children: [
         Padding(
           padding: const EdgeInsets.all(16.0),
-          child: TypeAheadField(
-            textFieldConfiguration: TextFieldConfiguration(
-              controller: _controller,
-              decoration: InputDecoration(
-                hintText: 'Enter New Ideas...',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.0),
+          child: Row(
+            children: [
+              Expanded(
+                child: TypeAheadField(
+                  textFieldConfiguration: TextFieldConfiguration(
+                    controller: _controller,
+                    decoration: InputDecoration(
+                      hintText: 'Enter New Ideas...',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                    ),
+                    onChanged: (text) {
+                      setState(() {
+                        isLinkingMode = text.contains('<') && text.contains('>');
+                      });
+                    },
+                    onSubmitted: (text) {
+                      if (isLinkingMode) {
+                        final linkingText = _controller.text;
+                        final suggestionWithBrackets = '<$selectedLinkingEntity>';
+                        final updatedText = linkingText.replaceFirst(RegExp('<[^>]*>'), suggestionWithBrackets);
+                        _controller.text = updatedText;
+                        selectedLinkingEntity = '';
+                      }
+                      addItemToList(text, '');
+                    },
+                  ),
+                  suggestionsCallback: (pattern) async {
+                    return items
+                        .where((item) => item.title.toLowerCase().contains(pattern.toLowerCase()))
+                        .toList();
+                  },
+                  itemBuilder: (context, suggestion) {
+                    return ListTile(
+                      title: Text(
+                        suggestion.title,
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isLinkingMode ? Colors.blue : null),
+                      ),
+                      onTap: () {
+                        setState(() {
+                          if (isLinkingMode) {
+                            selectedLinkingEntity = suggestion.title;
+                          } else {
+                            _controller.text = suggestion.title;
+                          }
+                        });
+                        _controller.selection =
+                            TextSelection.fromPosition(TextPosition(offset: _controller.text.length));
+                      },
+                    );
+                  },
+                  onSuggestionSelected: (suggestion) {
+                    setState(() {
+                      if (isLinkingMode) {
+                        selectedLinkingEntity = suggestion.title;
+                      } else {
+                        _controller.text = suggestion.title;
+                      }
+                    });
+                    _controller.selection = TextSelection.fromPosition(
+                        TextPosition(offset: _controller.text.length));
+                  },
                 ),
-                filled: true,
-                fillColor: Colors.grey[200],
               ),
-              onSubmitted: addItemToList,
-            ),
-            suggestionsCallback: (pattern) async {
-              return items
-                  .where((item) =>
-                  item.toLowerCase().contains(pattern.toLowerCase()))
-                  .toList();
-            },
-            itemBuilder: (context, suggestion) {
-              return ListTile(
-                title: Text(
-                  suggestion,
-                  style: TextStyle(fontWeight: FontWeight.bold),
+              SizedBox(width: 8.0),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  primary: Theme.of(context).primaryColor,
+                  onPrimary: Colors.white,
+                  shape: CircleBorder(),
                 ),
-                onTap: () => _showDeleteOption(context, suggestion),
-              );
-            },
-            onSuggestionSelected: (suggestion) {
-              _controller.text = suggestion;
-            },
+                onPressed: () {
+                  if (isLinkingMode) {
+                    final linkingText = _controller.text;
+                    final suggestionWithBrackets = '<$selectedLinkingEntity>';
+                    final updatedText = linkingText.replaceFirst(RegExp('<[^>]*>'), suggestionWithBrackets);
+                    _controller.text = updatedText;
+                    selectedLinkingEntity = '';
+                  }
+                  addItemToList(_controller.text, '');
+                },
+                child: Icon(Icons.add),
+              ),
+            ],
           ),
         ),
         Expanded(
-          child: ListView.builder(
+          child: ReorderableListView.builder(
             itemCount: items.length,
             itemBuilder: (context, index) {
-              return Dismissible(
-                key: Key(items[index]),
-                direction: DismissDirection.endToStart,
-                background: Container(
-                  color: Colors.red,
-                  alignment: Alignment.centerRight,
-                  padding: const EdgeInsets.only(right: 16.0),
-                  child: const Icon(Icons.delete, color: Colors.white),
+              final isCurrentLinkingEntity = items[index].title == selectedLinkingEntity;
+              return ListTile(
+                key: ValueKey(items[index].title),
+                title: Text(
+                  items[index].title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: isCurrentLinkingEntity ? Colors.blue : null,
+                  ),
                 ),
-                onDismissed: (direction) {
+                subtitle: Text(items[index].description),
+                onTap: () {
                   setState(() {
-                    items.removeAt(index);
+                    if (selectedLinkingEntity.isNotEmpty) {
+                      final linkingText = _controller.text;
+                      final suggestionWithBrackets = '<$selectedLinkingEntity>';
+                      final updatedText = linkingText.replaceFirst(RegExp('<[^>]*>'), suggestionWithBrackets);
+                      _controller.text = updatedText;
+                      selectedLinkingEntity = '';
+                    }
                   });
                 },
-                child: ListTile(
-                  title: Text(
-                    items[index],
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  ),
-                  onTap: () => _showDeleteOption(context, items[index]),
-                ),
               );
+            },
+            onReorder: (oldIndex, newIndex) {
+              if (oldIndex < newIndex) {
+                newIndex -= 1;
+              }
+              setState(() {
+                final item = items.removeAt(oldIndex);
+                items.insert(newIndex, item);
+              });
             },
           ),
         ),
@@ -130,7 +275,6 @@ class _AutocompleteWidgetState extends State<AutocompleteWidget> {
             ),
           ),
           onPressed: () {
-            // Save the list or perform any other action here.
             _showSaveDialog();
           },
           child: const Text('Save List'),
@@ -146,7 +290,6 @@ class _AutocompleteWidgetState extends State<AutocompleteWidget> {
             ),
           ),
           onPressed: () {
-            // Clear the list.
             _clearList();
           },
           child: const Text('Clear List'),
@@ -162,7 +305,6 @@ class _AutocompleteWidgetState extends State<AutocompleteWidget> {
             ),
           ),
           onPressed: () {
-            // Delete the list.
             _deleteList();
           },
           child: const Text('Delete List'),
@@ -171,111 +313,16 @@ class _AutocompleteWidgetState extends State<AutocompleteWidget> {
     );
   }
 
-  // Rest of the code remains unchanged...
-  // ...
-
-  // Show a dialog to confirm saving the list.
-  void _showSaveDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Save List'),
-          content: const Text('Do you want to save the list?'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                // Perform the save action or navigate to another screen to save the list.
-                _saveList();
-                Navigator.pop(context);
-              },
-              child: const Text('Save'),
-            ),
-          ],
-        );
-      },
-    );
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
+}
 
-  // Save the list to a persistent storage or perform any other required action.
-  void _saveList() {
-    // Here, we'll just print the list to the console.
-    print('List items:');
-    for (String item in items) {
-      print(item);
-    }
-  }
+class Idea {
+  final String title;
+  final String description;
 
-  // Clear the list.
-  void _clearList() {
-    setState(() {
-      items.clear();
-    });
-  }
-
-  // Delete the list.
-  void _deleteList() {
-    setState(() {
-      items.clear();
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'List deleted!',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
-
-  // Show the delete option for the selected item.
-  void _showDeleteOption(BuildContext context, String item) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: const Text('Delete Item'),
-          content: const Text('Do you want to delete this item?'),
-          actions: [
-            TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
-              child: const Text('Cancel'),
-            ),
-            TextButton(
-              onPressed: () {
-                _deleteItem(item);
-                Navigator.pop(context);
-              },
-              child: const Text('Delete'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // Delete the selected item from the list.
-  void _deleteItem(String item) {
-    setState(() {
-      items.remove(item);
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Item deleted!',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        duration: Duration(seconds: 2),
-      ),
-    );
-  }
+  Idea({required this.title, required this.description});
 }
